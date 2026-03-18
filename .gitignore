@@ -1,0 +1,9 @@
+/target
+.env
+*.pem
+data/*.json
+data/*.jsonl
+contracts/out/
+contracts/cache/
+.blender-toolkit/
+.plugin-config/

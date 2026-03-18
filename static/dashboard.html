@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Chain Liquidator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230d1117'/><circle cx='12' cy='16' r='7' fill='none' stroke='%233fb950' stroke-width='2.5'/><circle cx='20' cy='16' r='7' fill='none' stroke='%2358a6ff' stroke-width='2.5'/></svg>">
+<style>
+:root {
+  --bg: #0d1117; --card: #161b22; --border: #30363d;
+  --text: #c9d1d9; --text-dim: #8b949e; --text-bright: #f0f6fc;
+  --blue: #58a6ff; --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code',monospace; font-size:13px; }
+.container { max-width:1400px; margin:0 auto; padding:16px; }
+.header { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); margin-bottom:16px; flex-wrap:wrap; }
+.header h1 { font-size:18px; color:var(--text-bright); font-weight:600; }
+.badge { padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; text-transform:uppercase; }
+.badge-live { background:var(--green); color:#000; }
+.badge-dry { background:var(--yellow); color:#000; }
+.header-right { margin-left:auto; display:flex; gap:12px; align-items:center; }
+.wallet-addr { color:var(--text-dim); font-size:11px; }
+.uptime { color:var(--text-dim); font-size:12px; }
+.refresh-indicator { color:var(--text-dim); font-size:11px; }
+.stats-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:16px; }
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 14px; }
+.stat-label { color:var(--text-dim); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }
+.stat-value { font-size:22px; font-weight:700; color:var(--text-bright); margin-top:2px; }
+.stat-value.green { color:var(--green); }
+.stat-value.red { color:var(--red); }
+.stat-sub { color:var(--text-dim); font-size:10px; margin-top:2px; }
+.section-title { color:var(--text-dim); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin:16px 0 8px; }
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:900px) { .two-col { grid-template-columns:1fr; } }
+.monitors { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; margin-bottom:16px; }
+.monitor-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px; }
+.monitor-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.monitor-name { font-weight:600; color:var(--text-bright); font-size:13px; }
+.monitor-proto { color:var(--text-dim); font-size:10px; }
+.status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.status-ok { background:var(--green); box-shadow:0 0 6px var(--green); }
+.status-err { background:var(--red); }
+.monitor-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+.monitor-stat-label { color:var(--text-dim); font-size:9px; text-transform:uppercase; }
+.monitor-stat-value { font-size:14px; font-weight:600; }
+.positions-table { width:100%; border-collapse:collapse; }
+.positions-table th { text-align:left; color:var(--text-dim); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:5px 6px; border-bottom:1px solid var(--border); }
+.positions-table td { padding:5px 6px; border-bottom:1px solid var(--border); font-size:12px; }
+.positions-table tr:hover td { background:rgba(88,166,255,0.05); }
+.hf-critical { color:var(--red); font-weight:700; }
+.hf-warning { color:var(--yellow); font-weight:600; }
+.hf-safe { color:var(--green); }
+.events-box { max-height:350px; overflow-y:auto; background:var(--card); border:1px solid var(--border); border-radius:8px; }
+.event-row { display:flex; gap:8px; padding:5px 10px; border-bottom:1px solid rgba(48,54,61,0.5); font-size:11px; }
+.event-row:hover { background:rgba(88,166,255,0.03); }
+.event-time { color:var(--text-dim); min-width:60px; flex-shrink:0; }
+.event-chain { color:var(--purple); min-width:90px; flex-shrink:0; font-size:10px; }
+.event-type { min-width:70px; flex-shrink:0; font-weight:600; }
+.ev-success { color:var(--green); }
+.ev-error { color:var(--red); }
+.ev-candidate { color:var(--yellow); }
+.ev-info { color:var(--blue); }
+.event-msg { color:var(--text); }
+.empty-msg { padding:16px; text-align:center; color:var(--text-dim); font-size:12px; }
+.wallet-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; margin-bottom:16px; }
+.wallet-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 14px; }
+.wallet-chain { color:var(--text-dim); font-size:10px; text-transform:uppercase; }
+.wallet-bal { font-size:18px; font-weight:700; color:var(--text-bright); margin-top:2px; }
+.wallet-sym { color:var(--text-dim); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Multi-Chain Liquidator</h1>
+    <span id="mode-badge" class="badge badge-dry">DRY RUN</span>
+    <div class="header-right">
+      <span class="wallet-addr" id="wallet-addr"></span>
+      <span class="refresh-indicator" id="refresh">Connecting...</span>
+      <span class="uptime" id="uptime"></span>
+    </div>
+  </div>
+
+  <div class="stats-row" id="stats-row"></div>
+
+  <div class="section-title">Wallet Balances</div>
+  <div class="wallet-grid" id="wallets"></div>
+
+  <div class="section-title">Monitors</div>
+  <div class="monitors" id="monitors"></div>
+
+  <div class="two-col">
+    <div>
+      <div class="section-title">At-Risk Positions</div>
+      <table class="positions-table">
+        <thead><tr><th>Chain</th><th>Address</th><th>HF</th><th>Collateral</th><th>Drop</th></tr></thead>
+        <tbody id="positions"></tbody>
+      </table>
+    </div>
+    <div>
+      <div class="section-title">Events</div>
+      <div class="events-box" id="events"></div>
+    </div>
+  </div>
+</div>
+<script>
+var TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+var lastData = null;
+
+function fmt(n, d) { d = d || 0; return n.toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}); }
+function fmtTime(unix) { return new Date(unix * 1000).toLocaleTimeString('en-US', {hour12:false}); }
+function fmtAgo(unix) {
+  var s = Math.floor(Date.now()/1000 - unix);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+function fmtUptime(startUnix) {
+  var s = Math.floor(Date.now()/1000 - startUnix);
+  var d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60);
+  return (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+}
+
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function clearNode(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+function mkStatCard(label, value, colorClass, sub) {
+  var card = el('div', 'stat-card');
+  card.appendChild(el('div', 'stat-label', label));
+  card.appendChild(el('div', 'stat-value' + (colorClass ? ' ' + colorClass : ''), value));
+  if (sub) card.appendChild(el('div', 'stat-sub', sub));
+  return card;
+}
+
+function mkWalletCard(key, w) {
+  var card = el('div', 'wallet-card');
+  card.appendChild(el('div', 'wallet-chain', key));
+  var row = el('div');
+  var bal = el('span', 'wallet-bal', fmt(w.balance, 4));
+  var sym = el('span', 'wallet-sym', ' ' + w.symbol);
+  row.appendChild(bal);
+  row.appendChild(sym);
+  card.appendChild(row);
+  return card;
+}
+
+function mkMonitorCard(key, m) {
+  var card = el('div', 'monitor-card');
+  var hdr = el('div', 'monitor-header');
+  var nameDiv = el('div');
+  nameDiv.appendChild(el('div', 'monitor-name', key));
+  nameDiv.appendChild(el('div', 'monitor-proto', m.protocol));
+  hdr.appendChild(nameDiv);
+  hdr.appendChild(el('span', 'status-dot ' + (m.rpc_ok ? 'status-ok' : 'status-err')));
+  card.appendChild(hdr);
+
+  var stats = el('div', 'monitor-stats');
+  var pairs = [
+    ['Borrowers', fmt(m.borrowers)],
+    ['At-Risk', String(m.at_risk)],
+    ['Scan', m.last_scan_ms + 'ms'],
+    ['Scans', String(m.total_scans)],
+    ['Block', fmt(m.last_block)],
+    ['Updated', fmtAgo(m.updated_at_unix)]
+  ];
+  for (var i = 0; i < pairs.length; i++) {
+    var st = el('div');
+    st.appendChild(el('div', 'monitor-stat-label', pairs[i][0]));
+    var sv = el('div', 'monitor-stat-value', pairs[i][1]);
+    if (pairs[i][0] === 'At-Risk' && m.at_risk > 0) sv.style.color = 'var(--yellow)';
+    st.appendChild(sv);
+    stats.appendChild(st);
+  }
+  card.appendChild(stats);
+  return card;
+}
+
+function mkPositionRow(chain, p) {
+  var tr = document.createElement('tr');
+  tr.appendChild(el('td', null, chain.split('/')[1] || chain));
+  var addrTd = el('td', null, p.address.slice(0, 8) + '..');
+  addrTd.title = p.address;
+  tr.appendChild(addrTd);
+  var hfClass = p.health_factor < 1.0 ? 'hf-critical' : p.health_factor < 1.05 ? 'hf-warning' : 'hf-safe';
+  tr.appendChild(el('td', hfClass, p.health_factor.toFixed(4)));
+  tr.appendChild(el('td', null, p.collateral_symbol));
+  tr.appendChild(el('td', null, p.drop_needed_pct.toFixed(1) + '%'));
+  return tr;
+}
+
+function mkEventRow(e) {
+  var row = el('div', 'event-row');
+  row.appendChild(el('span', 'event-time', fmtTime(e.timestamp_unix)));
+  row.appendChild(el('span', 'event-chain', e.chain.split('/')[1] || e.chain));
+  var typeClass = 'ev-info';
+  if (e.event_type.indexOf('success') >= 0) typeClass = 'ev-success';
+  else if (e.event_type.indexOf('fail') >= 0 || e.event_type.indexOf('error') >= 0) typeClass = 'ev-error';
+  else if (e.event_type.indexOf('candidate') >= 0) typeClass = 'ev-candidate';
+  row.appendChild(el('span', 'event-type ' + typeClass, e.event_type));
+  row.appendChild(el('span', 'event-msg', e.message));
+  return row;
+}
+
+async function refresh() {
+  try {
+    var r = await fetch('/api/status?token=' + TOKEN);
+    if (!r.ok) { document.getElementById('refresh').textContent = 'Auth error'; return; }
+    lastData = await r.json();
+    render(lastData);
+    document.getElementById('refresh').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US', {hour12:false});
+  } catch(err) {
+    document.getElementById('refresh').textContent = 'Connection error';
+  }
+}
+
+function render(d) {
+  // Header
+  var badge = document.getElementById('mode-badge');
+  badge.textContent = d.dry_run ? 'DRY RUN' : 'LIVE';
+  badge.className = 'badge ' + (d.dry_run ? 'badge-dry' : 'badge-live');
+  document.getElementById('uptime').textContent = fmtUptime(d.started_at_unix);
+  if (d.wallet_address) {
+    document.getElementById('wallet-addr').textContent = d.wallet_address.slice(0, 6) + '...' + d.wallet_address.slice(-4);
+    document.getElementById('wallet-addr').title = d.wallet_address;
+  }
+
+  // Aggregate stats
+  var totalProfit = 0, totalSuccess = 0, totalAttempted = 0, totalFailed = 0, totalCandidates = 0;
+  for (var k in d.executor_stats) {
+    var s = d.executor_stats[k];
+    totalProfit += s.total_profit_usd;
+    totalSuccess += s.total_success;
+    totalAttempted += s.total_attempted;
+    totalFailed += s.total_failed;
+    totalCandidates += s.total_candidates;
+  }
+  var totalAtRisk = 0, totalBorrowers = 0, monitorsActive = Object.keys(d.monitors).length;
+  for (var mk in d.monitors) {
+    totalAtRisk += d.monitors[mk].at_risk;
+    totalBorrowers += d.monitors[mk].borrowers;
+  }
+  var winRate = totalAttempted > 0 ? (totalSuccess / totalAttempted * 100).toFixed(0) + '%' : '-';
+
+  var statsRow = document.getElementById('stats-row');
+  clearNode(statsRow);
+  statsRow.appendChild(mkStatCard('Profit', '$' + fmt(totalProfit, 2), totalProfit >= 0 ? 'green' : 'red'));
+  statsRow.appendChild(mkStatCard('Liquidations', totalSuccess + '/' + totalAttempted, '', 'Win rate: ' + winRate));
+  statsRow.appendChild(mkStatCard('Monitors', monitorsActive + '/6', monitorsActive >= 5 ? 'green' : ''));
+  statsRow.appendChild(mkStatCard('At-Risk', String(totalAtRisk), totalAtRisk > 0 ? 'red' : ''));
+  statsRow.appendChild(mkStatCard('Borrowers', fmt(totalBorrowers), ''));
+  statsRow.appendChild(mkStatCard('Candidates', String(totalCandidates), totalCandidates > 0 ? 'yellow' : ''));
+
+  // Wallet balances
+  var walletsEl = document.getElementById('wallets');
+  clearNode(walletsEl);
+  var wKeys = Object.keys(d.wallet_balances).sort();
+  if (wKeys.length === 0) {
+    walletsEl.appendChild(el('div', 'empty-msg', 'Loading balances...'));
+  } else {
+    for (var wi = 0; wi < wKeys.length; wi++) {
+      walletsEl.appendChild(mkWalletCard(wKeys[wi], d.wallet_balances[wKeys[wi]]));
+    }
+  }
+
+  // Monitors
+  var monitorsEl = document.getElementById('monitors');
+  clearNode(monitorsEl);
+  var keys = Object.keys(d.monitors).sort();
+  if (keys.length === 0) {
+    monitorsEl.appendChild(el('div', 'empty-msg', 'Initializing monitors... (scanning borrowers)'));
+  } else {
+    for (var i = 0; i < keys.length; i++) {
+      monitorsEl.appendChild(mkMonitorCard(keys[i], d.monitors[keys[i]]));
+    }
+  }
+
+  // Positions
+  var allPositions = [];
+  for (var mk2 in d.monitors) {
+    var mon = d.monitors[mk2];
+    for (var j = 0; j < mon.at_risk_positions.length; j++) {
+      allPositions.push({chain: mk2, pos: mon.at_risk_positions[j]});
+    }
+  }
+  allPositions.sort(function(a, b) { return a.pos.health_factor - b.pos.health_factor; });
+
+  var posBody = document.getElementById('positions');
+  clearNode(posBody);
+  if (allPositions.length === 0) {
+    var emptyTr = document.createElement('tr');
+    var emptyTd = el('td', 'empty-msg', 'No at-risk positions');
+    emptyTd.colSpan = 5;
+    emptyTr.appendChild(emptyTd);
+    posBody.appendChild(emptyTr);
+  } else {
+    for (var pi = 0; pi < Math.min(allPositions.length, 30); pi++) {
+      posBody.appendChild(mkPositionRow(allPositions[pi].chain, allPositions[pi].pos));
+    }
+  }
+
+  // Events
+  var eventsEl = document.getElementById('events');
+  clearNode(eventsEl);
+  if (d.events.length === 0) {
+    eventsEl.appendChild(el('div', 'empty-msg', 'No events yet'));
+  } else {
+    for (var ei = 0; ei < Math.min(d.events.length, 100); ei++) {
+      eventsEl.appendChild(mkEventRow(d.events[ei]));
+    }
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+setInterval(function() {
+  if (lastData) document.getElementById('uptime').textContent = fmtUptime(lastData.started_at_unix);
+}, 1000);
+</script>
+</body>
+</html>

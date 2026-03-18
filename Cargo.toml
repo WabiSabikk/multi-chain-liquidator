@@ -1,0 +1,38 @@
+[package]
+name = "multi-chain-liquidator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alloy = { version = "1.7", default-features = false, features = [
+    "consensus",
+    "contract",
+    "eips",
+    "genesis",
+    "network",
+    "provider-http",
+    "provider-ws",
+    "rpc-types",
+    "signer-local",
+    "sol-types",
+    "transport-http",
+    "transport-ws",
+    "reqwest",
+    "reqwest-rustls-tls",
+] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dotenvy = "0.15"
+eyre = "0.6"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+axum = "0.8"
+futures-util = "0.3"
+hex = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
